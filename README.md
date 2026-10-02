@@ -7,42 +7,70 @@ EchoMiner is a deterministic, rule-based Python pipeline that parses semi-struct
 
 ## What it extracts
 
-EchoMiner extracts **45 fields per report**:
+EchoMiner returns **47 columns per report**: 2 patient identifiers (Name, Address) and 45 data fields.
 
-| Domain | Fields |
+| Domain | Columns |
 |---|---|
-| Patient demographics | Identifiers, age, sex |
-| M-mode measurements | Aortic root, left atrial dimension, ejection fraction, fractional shortening, and related dimensions |
-| Doppler valve velocities | Mitral, tricuspid, aortic, and pulmonary valves |
-| Categorical findings | 16 structured findings fields |
-| Impressions | Up to 10 free-text impression statements per report |
+| Patient details | Name, Address, Age / Gender (one combined field, e.g. `56 / M`) |
+| M-mode measurements | AO, LA, RV, L VID d, L VID s, IVS d, IVS s, LVPW d, LVPW s, EDV, ESV, SV, EF, FS |
+| Doppler | MV and TV (E and A velocities), AV and PV (Vmax) |
+| Findings | 16 free-text sections: Left Ventricle, Left Atrium, Right Ventricle, Right Atrium, Aorta, Pulmonary Artery, IVS, IAS, Mitral Valve, Aortic Valve, Tricuspid Valve, Pulmonary Valve, Pericardium, Colour Doppler, Doppler Study, Others |
+| Impressions | IMPRESSION1 to IMPRESSION10, one impression statement per column |
 
 ## How it works
 
-1. **Text extraction:** report text is read from PDF files using PyMuPDF.
-2. **Report segmentation:** PDFs containing multiple reports are split into individual reports using the institutional footer markers.
-3. **Pattern matching:** regular expressions identify and extract each field.
-4. **Output:** results are returned as a pandas DataFrame and can be exported to Excel or CSV for statistical analysis.
+1. **Text extraction:** the text of each PDF is read with PyMuPDF.
+2. **Report segmentation:** a PDF containing several reports is split into individual reports at each "Echo Technologist" signature line, which closes each report.
+3. **Pattern matching:** regular expressions extract each field from each report.
+4. **Output:** one pandas DataFrame, with one row per report.
 
 The pipeline is deterministic: the same input always produces the same output.
 
+## Output format
+
+- All values are returned as text. Numeric fields must be converted before analysis.
+- Age / Gender, MV and TV are combined fields (for example `56 / M`, `E80, A60`) and must be split before analysis.
+- A field not found in a report is left empty.
+
 ## Scope and limitations
 
-- EchoMiner was developed for the echocardiography report template of a single institution. Reports in other formats will need the segmentation markers and extraction patterns adapted.
-- Extraction accuracy depends on report formatting. Outputs should be checked against a sample of source reports before use in research.
+- EchoMiner was written for the echocardiography report template of a single institution. Reports in other formats need the segmentation marker and extraction patterns adapted.
+- Doppler values are assigned by their order within the Doppler section (first E/A pair to MV, second to TV; first Vmax to AV, second to PV). Reports listing valves in a different order will be misassigned.
+- Extraction accuracy depends on report formatting. Check outputs against a sample of source reports before using them in research.
 
 ## Requirements
 
 - Python 3
 - [PyMuPDF](https://pymupdf.readthedocs.io/)
 - [pandas](https://pandas.pydata.org/)
+- [openpyxl](https://openpyxl.readthedocs.io/) (only for exporting to Excel)
 
 ## Usage
 
-```bash
-python EchoMiner.py
+The script provides one function, `extract_echo_data()`, which takes the path to a single PDF and returns a DataFrame.
+
+```python
+from EchoMiner import extract_echo_data
+
+df = extract_echo_data("reports.pdf")
+df.to_csv("echo_extracted.csv", index=False)
+# or: df.to_excel("echo_extracted.xlsx", index=False)
 ```
 
+To process a folder of PDFs:
+
+```python
+from pathlib import Path
+import pandas as pd
+from EchoMiner import extract_echo_data
+
+frames = [extract_echo_data(str(p)) for p in sorted(Path("reports").glob("*.pdf"))]
+pd.concat(frames, ignore_index=True).to_csv("echo_extracted.csv", index=False)
+```
+
+## Data privacy
+
+This repository contains source code only. It contains **no echocardiography reports, patient data, or extracted datasets**. EchoMiner's output includes patient names and addresses; handle it under the applicable ethics approval and data-protection rules.
 ## Data privacy
 
 This repository contains source code only. It contains **no echocardiography reports, patient data, or extracted datasets**.
